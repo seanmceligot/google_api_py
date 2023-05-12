@@ -7,6 +7,16 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from icecream import ic
 
+"""
+This script downloads a google sheet as a csv file.
+
+to create the client_secrets.json file, follow the instructions here:
+https://developers.google.com/identity/protocols/oauth2/native-app#step-1-configure-your-project
+
+add the google drive api to your project:
+https://console.cloud.google.com/apis/library/drive.googleapis.com
+
+"""
 AUTH_URL = "https://accounts.google.com/o/oauth2/auth"
 TOKEN_URL = "https://accounts.google.com/o/oauth2/token"
 SCOPES = [
@@ -39,7 +49,13 @@ def get_flow_using_browser(client_secrets):
 
 
 """
+This is the flow for offline access
+
+documenation:
 https://googleapis.github.io/google-api-python-client/docs/oauth.html
+
+https://developers.google.com/identity/protocols/oauth2/native-app#offline-access
+
 """
 
 
