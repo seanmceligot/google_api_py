@@ -7,24 +7,15 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from icecream import ic
 
+AUTH_URL = "https://accounts.google.com/o/oauth2/auth"
+TOKEN_URL = "https://accounts.google.com/o/oauth2/token"
+SCOPES = [
+    "https://www.googleapis.com/auth/drive",
+]
+REDIRECT_URI = "http://localhost:8080"
 
-def main(file_id):
-    """Downloads a file from Google Drive."""
 
-    AUTH_URL = "https://accounts.google.com/o/oauth2/auth"
-    TOKEN_URL = "https://accounts.google.com/o/oauth2/token"
-
-    # this will be created if it doesn't exist
-    creds_file = "credentials.json"
-
-    # this shold be downloaded from the google cloud console OAuth 2.0 Client IDs
-    # https://console.cloud.google.com/apis/credentials
-    client_secrets_file = "client_secrets.json"
-
-    with open(client_secrets_file) as f:
-        client_secrets = json.load(f)
-
-    REDIRECT_URI = "http://localhost:8080"
+def get_client_config(client_secrets, REDIRECT_URI):
     client_config = {
         "installed": {
             "client_id": client_secrets["installed"]["client_id"],
@@ -36,12 +27,60 @@ def main(file_id):
         }
     }
     # setup scopes for google drive api v3
-    SCOPES = [
-        "https://www.googleapis.com/auth/drive",
-    ]
     ic(client_config)
+    return client_config
+
+
+def get_flow_using_browser(client_secrets):
+    client_config = get_client_config(client_secrets, REDIRECT_URI)
     # Set up the OAuth2 flow.
     flow = InstalledAppFlow.from_client_config(client_config, scopes=SCOPES)
+    return flow
+
+
+"""
+https://googleapis.github.io/google-api-python-client/docs/oauth.html
+"""
+
+
+def get_flow_offline(client_secrets):
+    ic(client_secrets)
+    flow = InstalledAppFlow.from_client_secrets_file(
+        client_secrets, scopes=SCOPES, redirect_uri="urn:ietf:wg:oauth:2.0:oob"
+    )
+    ic(flow)
+    # Generate authorization URL
+    auth_url, _ = flow.authorization_url(prompt="consent")
+
+    # Print the authorization URL
+    print("Please visit the following URL to authorize the application:")
+    print(auth_url)
+
+    # Wait for the response
+    authorization_code = input("Enter the authorization code: ")
+    ic(authorization_code)
+    flow.fetch_token(code=authorization_code)
+
+    return flow
+
+
+def main(file_id, is_offline=False):
+    """Downloads a file from Google Drive."""
+
+    # this will be created if it doesn't exist
+    creds_file = "credentials.json"
+
+    # this shold be downloaded from the google cloud console OAuth 2.0 Client IDs
+    # https://console.cloud.google.com/apis/credentials
+    client_secrets_file = "client_secrets.json"
+
+    with open(client_secrets_file) as f:
+        client_secrets = json.load(f)
+
+    if is_offline:
+        flow = get_flow_offline(client_secrets_file)
+    else:
+        flow = get_flow_using_browser(client_secrets)
 
     # Try to load existing credentials from the file.
     creds = None
@@ -86,7 +125,9 @@ if __name__ == "__main__":
     # usage --sheet file_id
     parser = argparse.ArgumentParser(description="Download a file from Google Drive")
     parser.add_argument("--sheet", dest="file_id", help="Google Sheet file id")
+    parser.add_argument("--offline", dest="is_offline", action="store_true")
     args = parser.parse_args()
     file_id = args.file_id
+    is_offline = args.is_offline
 
-    main(file_id)
+    main(file_id, is_offline)
