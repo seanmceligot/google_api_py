@@ -28,6 +28,37 @@ SCOPES = [
 ]
 REDIRECT_URI = "http://localhost:8080"
 
+sheet_mime_type_map = {
+    # Spreadsheets	Microsoft Excel	application/vnd.openxmlformats-officedocument.spreadsheetml.sheet	.xlsx
+    "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    # OpenDocument	application/x-vnd.oasis.opendocument.spreadsheet	.ods
+    "ods": "application/x-vnd.oasis.opendocument.spreadsheet",
+    # PDF	application/pdf	.pdf
+    "pdf": "application/pdf",
+    # Web Page (HTML)	application/zip	.zip
+    "html": "application/zip",
+    # Comma Separated Values (first-sheet only)	text/csv	.csv
+    "csv": "text/csv",
+    # Tab Separated Values (first-sheet only)	text/tab-separated-values	.tsv
+    "tsv": "text/tab-separated-values",
+}
+doc_type_mape = {
+    # Microsoft Word	application/vnd.openxmlformats-officedocument.wordprocessingml.document	.docx
+    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    # OpenDocument	application/vnd.oasis.opendocument.text	.odt
+    "odt": "application/vnd.oasis.opendocument.text",
+    # Rich Text	application/rtf	.rtf
+    "rtf": "application/rtf",
+    # PDF	application/pdf	.pdf
+    "pdf": "application/pdf",
+    # Plain Text	text/plain	.txt
+    "txt": "text/plain",
+    # Web Page (HTML)	application/zip	.zip
+    "html": "application/zip",
+    # EPUB	application/epub+zip	.epub
+    "epub": "application/epub+zip",
+}
+
 
 def get_client_config(client_secrets, REDIRECT_URI):
     client_config = {
@@ -107,9 +138,7 @@ def download(drive_service, file_type, download_mime_type, file_id):
     return file_content
 
 
-def main(file_type, download_mime_type, file_id, output_file, is_offline=False):
-    """Downloads a file from Google Drive."""
-
+def load_creds(is_offline):
     # this will be created if it doesn't exist
     creds_file = "credentials.json"
 
@@ -140,7 +169,12 @@ def main(file_type, download_mime_type, file_id, output_file, is_offline=False):
         with open(creds_file, "w") as f:
             creds_json_str = creds.to_json()
             f.write(creds_json_str)
+    return creds
 
+
+def write_file(file_type, download_mime_type, file_id, output_file, is_offline):
+    """Downloads a file from Google Drive."""
+    creds = load_creds(is_offline)
     # Build the Google Drive API service object.
     drive_service = build("drive", "v3", credentials=creds)
 
@@ -175,42 +209,12 @@ if __name__ == "__main__":
         choices=["xlsx", "ods", "pdf", "html", "csv", "tsv"],
         help="download a google sheet to the given export type",
     )
-    sheet_mime_type_map = {
-        # Spreadsheets	Microsoft Excel	application/vnd.openxmlformats-officedocument.spreadsheetml.sheet	.xlsx
-        "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        # OpenDocument	application/x-vnd.oasis.opendocument.spreadsheet	.ods
-        "ods": "application/x-vnd.oasis.opendocument.spreadsheet",
-        # PDF	application/pdf	.pdf
-        "pdf": "application/pdf",
-        # Web Page (HTML)	application/zip	.zip
-        "html": "application/zip",
-        # Comma Separated Values (first-sheet only)	text/csv	.csv
-        "csv": "text/csv",
-        # Tab Separated Values (first-sheet only)	text/tab-separated-values	.tsv
-        "tsv": "text/tab-separated-values",
-    }
 
     group.add_argument(
         "--doc",
         choices=["docx", "odt", "rtf", "pdf", "txt", "html", "epub"],
         help="download a google doc to the given export type",
     )
-    doc_type_mape = {
-        # Microsoft Word	application/vnd.openxmlformats-officedocument.wordprocessingml.document	.docx
-        "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        # OpenDocument	application/vnd.oasis.opendocument.text	.odt
-        "odt": "application/vnd.oasis.opendocument.text",
-        # Rich Text	application/rtf	.rtf
-        "rtf": "application/rtf",
-        # PDF	application/pdf	.pdf
-        "pdf": "application/pdf",
-        # Plain Text	text/plain	.txt
-        "txt": "text/plain",
-        # Web Page (HTML)	application/zip	.zip
-        "html": "application/zip",
-        # EPUB	application/epub+zip	.epub
-        "epub": "application/epub+zip",
-    }
     # offline: print URL and allow the user to copy and paste into any browner
     # google will present a cliploaard copy block for the authorization code
     # the user pastes the code into the terminal
@@ -220,7 +224,11 @@ if __name__ == "__main__":
     parser.add_argument(
         "--file-id", dest="file_id", required=True, help="Google Drive file id"
     )
-    parser.add_argument("-o", "--output", type=argparse.FileType("wb"))
+    action_group = parser.add_mutually_exclusive_group(required=True)
+    action_group.add_argument(
+        "-o", "--download", dest="output", type=argparse.FileType("wb")
+    )
+    action_group.add_argument("--upload", dest="infile", type=argparse.FileType("r"))
     args = parser.parse_args()
     file_id = args.file_id
     is_offline = args.is_offline
@@ -228,14 +236,14 @@ if __name__ == "__main__":
 
     if args.sheet:
         file_type = FileType.SHEET
-        download_mime_type = sheet_mime_type_map[args.sheet]
+        file_mime_type = sheet_mime_type_map[args.sheet]
     elif args.doc:
         file_type = FileType.DOC
-        download_mime_type = doc_type_mape[args.doc]
+        file_mime_type = doc_type_mape[args.doc]
     else:
         # print help
         parser.print_help()
         sys.exit(1)
     ic(file_type)
-    ic(download_mime_type)
-    main(file_type, download_mime_type, file_id, output_file, is_offline)
+    ic(file_mime_type)
+    write_file(file_type, file_mime_type, file_id, output_file, is_offline)
