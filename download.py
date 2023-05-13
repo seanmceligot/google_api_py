@@ -1,6 +1,8 @@
 import argparse
 import json
 import os
+import sys
+from enum import Enum
 
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -80,7 +82,30 @@ def get_flow_offline(client_secrets):
     return flow
 
 
-def main(file_id, is_offline=False):
+def download(drive_service, file_type, download_mime_type, file_id):
+    assert file_type in [FileType.SHEET, FileType.DOC]
+
+    # documentation: https://developers.google.com/drive/api/v3/manage-downloads
+    # mime types at https://developers.google.com/drive/api/guides/ref-export-formats
+    if file_type == FileType.SHEET:
+        file_content = (
+            drive_service.files()
+            .export(fileId=file_id, mimeType=download_mime_type)
+            .execute()
+        )
+    # download a google doc
+    elif file_type == FileType.DOC:
+        file_content = (
+            drive_service.files()
+            .export(fileId=file_id, mimeType=download_mime_type)
+            .execute()
+        )
+    else:
+        raise ValueError(f"file_type {file_type} not supported")
+    return file_content
+
+
+def main(file_type, download_mime_type, file_id, output_file, is_offline=False):
     """Downloads a file from Google Drive."""
 
     # this will be created if it doesn't exist
@@ -121,9 +146,7 @@ def main(file_id, is_offline=False):
     # get the file content.
     # Use Export with Docs Editors files.', 'domain': 'global', 'reason': 'fileNotDownloadable', 'location': 'alt', 'locationType': 'parameter'}]">
     # download a google sheet
-    file_content = (
-        drive_service.files().export(fileId=file_id, mimeType="text/csv").execute()
-    )
+    file_content = download(drive_service, file_type, download_mime_type, file_id)
 
     # print length of the file content or None
     if file_content:
@@ -132,18 +155,80 @@ def main(file_id, is_offline=False):
         ic(file_content)
 
     # Save the file content to a file.
-    with open(f"{file_id}.csv", "wb") as f:
-        f.write(file_content)
-        print(f"wrote {file_id}.csv")
+    output_file.write(file_content)
+    print(f"wrote {output_file}")
+
+
+class FileType(Enum):
+    SHEET = "sheet"
+    DOC = "doc"
 
 
 if __name__ == "__main__":
     # usage --sheet file_id
     parser = argparse.ArgumentParser(description="Download a file from Google Drive")
-    parser.add_argument("--sheet", dest="file_id", help="Google Sheet file id")
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument(
+        "--sheet",
+        choices=["xlsx", "ods", "pdf", "html", "csv", "tsv"],
+        help="download a google sheet to the given export type",
+    )
+    # sheet_group = group.add_mutually_exclusive_group(required=True)
+    # Spreadsheets	Microsoft Excel	application/vnd.openxmlformats-officedocument.spreadsheetml.sheet	.xlsx
+    # OpenDocument	application/x-vnd.oasis.opendocument.spreadsheet	.ods
+    # PDF	application/pdf	.pdf
+    # Web Page (HTML)	application/zip	.zip
+    # Comma Separated Values (first-sheet only)	text/csv	.csv
+    # Tab Separated Values (first-sheet only)	text/tab-separated-values	.tsv
+    sheet_mime_type_map = {
+        "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "ods": "application/x-vnd.oasis.opendocument.spreadsheet",
+        "pdf": "application/pdf",
+        "html": "application/zip",
+        "csv": "text/csv",
+        "tsv": "text/tab-separated-values",
+    }
+
+    # Microsoft Word	application/vnd.openxmlformats-officedocument.wordprocessingml.document	.docx
+    # OpenDocument	application/vnd.oasis.opendocument.text	.odt
+    # Rich Text	application/rtf	.rtf
+    # PDF	application/pdf	.pdf
+    # Plain Text	text/plain	.txt
+    # Web Page (HTML)	application/zip	.zip
+    # EPUB	application/epub+zip	.epub
+    group.add_argument(
+        "--doc",
+        choices=["docx", "odt", "rtf", "pdf", "txt", "html", "epub"],
+        help="download a google doc to the given export type",
+    )
+    doc_type_mape = {
+        "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "odt": "application/vnd.oasis.opendocument.text",
+        "rtf": "application/rtf",
+        "pdf": "application/pdf",
+        "txt": "text/plain",
+        "html": "application/zip",
+        "epub": "application/epub+zip",
+    }
     parser.add_argument("--offline", dest="is_offline", action="store_true")
+    parser.add_argument(
+        "--file-id", dest="file_id", required=True, help="Google Drive file id"
+    )
+    parser.add_argument("-o", "--output", type=argparse.FileType("wb"))
     args = parser.parse_args()
     file_id = args.file_id
     is_offline = args.is_offline
-
-    main(file_id, is_offline)
+    output_file = args.output
+    if args.sheet:
+        file_type = FileType.SHEET
+        download_mime_type = sheet_mime_type_map[args.sheet]
+    elif args.doc:
+        file_type = FileType.DOC
+        download_mime_type = doc_type_mape[args.doc]
+    else:
+        # print help
+        parser.print_help()
+        sys.exit(1)
+    ic(file_type)
+    ic(download_mime_type)
+    main(file_type, download_mime_type, file_id, output_file, is_offline)
