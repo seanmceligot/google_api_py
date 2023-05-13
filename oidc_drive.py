@@ -3,10 +3,12 @@ import json
 import os
 import sys
 from enum import Enum
+from pathlib import Path
 
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
+from googleapiclient.http import MediaFileUpload
 from icecream import ic
 
 """
@@ -19,6 +21,11 @@ add the google drive api to your project:
 https://console.cloud.google.com/apis/library/drive.googleapis.com
 
 """
+
+
+class FileType(Enum):
+    SHEET = "sheet"
+    DOC = "doc"
 
 
 AUTH_URL = "https://accounts.google.com/o/oauth2/auth"
@@ -115,6 +122,32 @@ def get_flow_offline(client_secrets):
     return flow
 
 
+def upload(
+    drive_service,
+    file_type: FileType,
+    upload_mime_type: str,
+    file_id: str,
+    input_file: Path,
+):
+    assert file_type in [FileType.SHEET, FileType.DOC]
+
+    # documentation: https://developers.google.com/drive/api/v3/manage-uploads
+    # mime types at https://developers.google.com/drive/api/v3/ref-export-formats
+    file_metadata = {"name": input_file.name, "mimeType": upload_mime_type}
+    media = MediaFileUpload(input_file, mimetype=upload_mime_type)
+    drive_service.files().update(
+        fileId=file_id, body=file_metadata, media_body=media
+    ).execute()
+    if file_type == FileType.SHEET:
+        print(
+            f"your file is uploaded to the url https://docs.google.com/spreadsheets/d/{file_id}/edit"
+        )
+    if file_type == FileType.DOC:
+        print(
+            f"your file is uploaded to the url https://docs.google.com/document/d/{file_id}/edit"
+        )
+
+
 def download(drive_service, file_type, download_mime_type, file_id):
     assert file_type in [FileType.SHEET, FileType.DOC]
 
@@ -172,7 +205,24 @@ def load_creds(is_offline):
     return creds
 
 
-def write_file(file_type, download_mime_type, file_id, output_file, is_offline):
+def read_and_upload(
+    file_type: FileType,
+    file_mime_type: str,
+    file_id: str,
+    in_file: Path,
+    is_offline: bool,
+):
+    creds = load_creds(is_offline)
+    # Build the Google Drive API service object.
+    drive_service = build("drive", "v3", credentials=creds)
+
+    ic(file_id)
+    upload(drive_service, file_type, file_mime_type, file_id, in_file)
+
+
+def download_and_write_file(
+    file_type, file_mime_type, file_id, output_file, is_offline
+):
     """Downloads a file from Google Drive."""
     creds = load_creds(is_offline)
     # Build the Google Drive API service object.
@@ -182,7 +232,7 @@ def write_file(file_type, download_mime_type, file_id, output_file, is_offline):
     # get the file content.
     # Use Export with Docs Editors files.', 'domain': 'global', 'reason': 'fileNotDownloadable', 'location': 'alt', 'locationType': 'parameter'}]">
     # download a google sheet
-    file_content = download(drive_service, file_type, download_mime_type, file_id)
+    file_content = download(drive_service, file_type, file_mime_type, file_id)
 
     # print length of the file content or None
     if file_content:
@@ -193,11 +243,6 @@ def write_file(file_type, download_mime_type, file_id, output_file, is_offline):
     # Save the file content to a file.
     output_file.write(file_content)
     print(f"wrote {output_file}")
-
-
-class FileType(Enum):
-    SHEET = "sheet"
-    DOC = "doc"
 
 
 if __name__ == "__main__":
@@ -228,7 +273,7 @@ if __name__ == "__main__":
     action_group.add_argument(
         "-o", "--download", dest="output", type=argparse.FileType("wb")
     )
-    action_group.add_argument("--upload", dest="infile", type=argparse.FileType("r"))
+    action_group.add_argument("--upload", dest="infile")
     args = parser.parse_args()
     file_id = args.file_id
     is_offline = args.is_offline
@@ -246,4 +291,17 @@ if __name__ == "__main__":
         sys.exit(1)
     ic(file_type)
     ic(file_mime_type)
-    write_file(file_type, file_mime_type, file_id, output_file, is_offline)
+    if args.output:
+        download_and_write_file(
+            file_type, file_mime_type, file_id, output_file, is_offline
+        )
+    elif args.infile:
+        infile = Path(args.infile)
+        if not infile.exists():
+            print(f"--upload argument: {args.infile} does not exist")
+            sys.exit(1)
+        read_and_upload(file_type, file_mime_type, file_id, infile, is_offline)
+    else:
+        # print help
+        parser.print_help()
+        sys.exit(1)
