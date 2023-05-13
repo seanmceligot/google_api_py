@@ -19,6 +19,8 @@ add the google drive api to your project:
 https://console.cloud.google.com/apis/library/drive.googleapis.com
 
 """
+
+
 AUTH_URL = "https://accounts.google.com/o/oauth2/auth"
 TOKEN_URL = "https://accounts.google.com/o/oauth2/token"
 SCOPES = [
@@ -173,44 +175,48 @@ if __name__ == "__main__":
         choices=["xlsx", "ods", "pdf", "html", "csv", "tsv"],
         help="download a google sheet to the given export type",
     )
-    # sheet_group = group.add_mutually_exclusive_group(required=True)
-    # Spreadsheets	Microsoft Excel	application/vnd.openxmlformats-officedocument.spreadsheetml.sheet	.xlsx
-    # OpenDocument	application/x-vnd.oasis.opendocument.spreadsheet	.ods
-    # PDF	application/pdf	.pdf
-    # Web Page (HTML)	application/zip	.zip
-    # Comma Separated Values (first-sheet only)	text/csv	.csv
-    # Tab Separated Values (first-sheet only)	text/tab-separated-values	.tsv
     sheet_mime_type_map = {
+        # Spreadsheets	Microsoft Excel	application/vnd.openxmlformats-officedocument.spreadsheetml.sheet	.xlsx
         "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        # OpenDocument	application/x-vnd.oasis.opendocument.spreadsheet	.ods
         "ods": "application/x-vnd.oasis.opendocument.spreadsheet",
+        # PDF	application/pdf	.pdf
         "pdf": "application/pdf",
+        # Web Page (HTML)	application/zip	.zip
         "html": "application/zip",
+        # Comma Separated Values (first-sheet only)	text/csv	.csv
         "csv": "text/csv",
+        # Tab Separated Values (first-sheet only)	text/tab-separated-values	.tsv
         "tsv": "text/tab-separated-values",
     }
 
-    # Microsoft Word	application/vnd.openxmlformats-officedocument.wordprocessingml.document	.docx
-    # OpenDocument	application/vnd.oasis.opendocument.text	.odt
-    # Rich Text	application/rtf	.rtf
-    # PDF	application/pdf	.pdf
-    # Plain Text	text/plain	.txt
-    # Web Page (HTML)	application/zip	.zip
-    # EPUB	application/epub+zip	.epub
     group.add_argument(
         "--doc",
         choices=["docx", "odt", "rtf", "pdf", "txt", "html", "epub"],
         help="download a google doc to the given export type",
     )
     doc_type_mape = {
+        # Microsoft Word	application/vnd.openxmlformats-officedocument.wordprocessingml.document	.docx
         "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        # OpenDocument	application/vnd.oasis.opendocument.text	.odt
         "odt": "application/vnd.oasis.opendocument.text",
+        # Rich Text	application/rtf	.rtf
         "rtf": "application/rtf",
+        # PDF	application/pdf	.pdf
         "pdf": "application/pdf",
+        # Plain Text	text/plain	.txt
         "txt": "text/plain",
+        # Web Page (HTML)	application/zip	.zip
         "html": "application/zip",
+        # EPUB	application/epub+zip	.epub
         "epub": "application/epub+zip",
     }
+    # offline: print URL and allow the user to copy and paste into any browner
+    # google will present a cliploaard copy block for the authorization code
+    # the user pastes the code into the terminal
     parser.add_argument("--offline", dest="is_offline", action="store_true")
+    # get the file id from the URL of the document. It looks like this:
+    # "https://docs.google.com/document/d/THE_FILE_ID/edit
     parser.add_argument(
         "--file-id", dest="file_id", required=True, help="Google Drive file id"
     )
@@ -219,6 +225,7 @@ if __name__ == "__main__":
     file_id = args.file_id
     is_offline = args.is_offline
     output_file = args.output
+
     if args.sheet:
         file_type = FileType.SHEET
         download_mime_type = sheet_mime_type_map[args.sheet]
